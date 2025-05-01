@@ -38,3 +38,8 @@ endif()
 
 zephyr_library_sources_ifdef(CONFIG_NRF_SYS_EVENT nrf_sys_event.c)
 zephyr_library_sources_ifdef(CONFIG_MRAM_LATENCY mram_latency.c)
+
+if((CONFIG_SOC_SERIES_NRF54LX))
+  zephyr_library_sources( soc_nrf_oscillator.c)
+endif()
+
