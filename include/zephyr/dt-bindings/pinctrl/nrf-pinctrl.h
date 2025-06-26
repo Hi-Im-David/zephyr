@@ -242,6 +242,18 @@
 #define NRF_FUN_TDM_SDOUT        76U
 /** TDM MCK */
 #define NRF_FUN_TDM_MCK          77U
+/** QSPI version 2 Chip select */
+#define NRF_FUN_QSPI2_CSN        78U
+/** QSPI version 2 Clock pin */
+#define NRF_FUN_QSPI2_SCK        79U
+/** QSPI version 2 Data pin 0 */
+#define NRF_FUN_QSPI2_DQ0        80U
+/** QSPI version 2 Data pin 1 */
+#define NRF_FUN_QSPI2_DQ1        81U
+/** QSPI version 2 Data pin 2 */
+#define NRF_FUN_QSPI2_DQ2        82U
+/** QSPI version 2 Data pin 3 */
+#define NRF_FUN_QSPI2_DQ3        83U
 
 /** @} */
 

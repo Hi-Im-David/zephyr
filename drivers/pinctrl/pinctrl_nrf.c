@@ -459,6 +459,20 @@ int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 			input = NRF_GPIO_PIN_INPUT_DISCONNECT;
 			break;
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_exmif) */
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_qspi2_controller)
+		/* No PSEL for QSPI2, pins only controlled by CTRLSEL */
+		// #error "QSPI2 pinctrl not supported"
+		case NRF_FUN_QSPI2_CSN:
+		case NRF_FUN_QSPI2_SCK:
+		case NRF_FUN_QSPI2_DQ0:
+		case NRF_FUN_QSPI2_DQ1:
+		case NRF_FUN_QSPI2_DQ2:
+		case NRF_FUN_QSPI2_DQ3:
+			nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_QSPI);
+			dir = NRF_GPIO_PIN_DIR_OUTPUT;
+			input = NRF_GPIO_PIN_INPUT_CONNECT;
+			break;
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_qspi2) */
 #if defined(NRF_PSEL_TWIS)
 		case NRF_FUN_TWIS_SCL:
 			NRF_PSEL_TWIS(reg, SCL) = psel;
