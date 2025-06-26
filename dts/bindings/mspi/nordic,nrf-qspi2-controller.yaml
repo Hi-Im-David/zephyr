@@ -1,0 +1,13 @@
+# Copyright (c) 2025 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: Nordic QSPI Controller Interface using SSI IP (QSPI2)
+
+compatible: "nordic,nrf-qspi2-controller"
+
+include: snps,designware-ssi.yaml
+
+properties:
+
+  op-mode: 
+    default: "MSPI_OP_MODE_CONTROLLER"

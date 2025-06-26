@@ -1,0 +1,8 @@
+# Copyright (c) 2025 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: Nordic QSPI Interface using SSI IP (QSPI2)
+
+compatible: "nordic,nrf-qspi2"
+
+include: snps,designware-ssi-controller.yaml

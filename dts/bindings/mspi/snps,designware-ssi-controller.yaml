@@ -1,0 +1,12 @@
+# Copyright (c) 2025 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: Synopsys DesignWare Synchronous Serial Interface (SSI) controller node
+
+compatible: "snps,designware-ssi-controller"
+
+include: ["snps,designware-ssi.yaml", mspi-controller.yaml, pinctrl-device.yaml]
+
+properties:
+
+  op-mode: "MSPI_OP_MODE_CONTROLLER"
