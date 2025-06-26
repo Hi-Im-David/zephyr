@@ -10,6 +10,7 @@
  */
 
 /* CTRLR0 - Control Register 0 */
+#define CTRLR0_SSISMST_BIT	BIT(31)
 #define CTRLR0_SPI_FRF_MASK	GENMASK(23, 22)
 #define CTRLR0_SPI_FRF_STANDARD	0UL
 #define CTRLR0_SPI_FRF_DUAL	1UL
