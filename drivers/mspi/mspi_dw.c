@@ -60,6 +60,9 @@ struct mspi_dw_data {
 	bool standard_spi;
 	bool suspended;
 
+	mspi_callback_handler_t         cbs[MSPI_BUS_EVENT_MAX];
+	struct mspi_callback_context    *cb_ctxs[MSPI_BUS_EVENT_MAX];
+
 	struct k_sem finished;
 	/* For synchronization of API calls made from different contexts. */
 	struct k_sem ctx_lock;
@@ -68,22 +71,6 @@ struct mspi_dw_data {
 	struct mspi_xfer xfer;
 };
 
-struct mspi_dw_config {
-	DEVICE_MMIO_ROM;
-	void (*irq_config)(void);
-	uint32_t clock_frequency;
-#if defined(CONFIG_PINCTRL)
-	const struct pinctrl_dev_config *pcfg;
-#endif
-	const struct gpio_dt_spec *ce_gpios;
-	uint8_t ce_gpios_len;
-	uint8_t tx_fifo_depth_minus_1;
-	uint8_t tx_fifo_threshold;
-	uint8_t rx_fifo_threshold;
-	DECLARE_REG_ACCESS();
-	bool sw_multi_periph;
-	enum mspi_op_mode op_mode;
-};
 
 /* Register access helpers. */
 #define DEFINE_MM_REG_RD_WR(reg, off) \
@@ -253,6 +240,7 @@ static bool read_rx_fifo(const struct device *dev,
 static void mspi_dw_isr(const struct device *dev)
 {
 	struct mspi_dw_data *dev_data = dev->data;
+	struct mspi_xfer xfer = dev_data->xfer;
 	const struct mspi_xfer_packet *packet =
 		&dev_data->xfer.packets[dev_data->packets_done];
 	bool finished = false;
@@ -302,10 +290,24 @@ static void mspi_dw_isr(const struct device *dev)
 	if (finished) {
 		write_imr(dev, 0);
 
+		// For async, call the registered callback with event context
+		if (xfer.async && dev_data->cbs[MSPI_BUS_XFER_COMPLETE]) {
+			struct mspi_callback_context *cb_ctx = dev_data->cb_ctxs[MSPI_BUS_XFER_COMPLETE];
+			if (cb_ctx) {
+				cb_ctx->mspi_evt.evt_type = MSPI_BUS_XFER_COMPLETE;
+				cb_ctx->mspi_evt.evt_data.controller = dev;
+				cb_ctx->mspi_evt.evt_data.dev_id = dev_data->dev_id;
+				cb_ctx->mspi_evt.evt_data.packet = packet;
+				cb_ctx->mspi_evt.evt_data.status = 0; // Success, or set error if needed
+				cb_ctx->mspi_evt.evt_data.packet_idx = dev_data->packets_done;
+			}
+			dev_data->cbs[MSPI_BUS_XFER_COMPLETE](cb_ctx);
+		}
+
 		k_sem_give(&dev_data->finished);
 	}
 
-	vendor_specific_irq_clear(dev);
+	vendor_specific_irq_clear(dev, dev->config);
 }
 
 static int api_config(const struct mspi_dt_spec *spec)
@@ -771,6 +773,7 @@ static int start_next_packet(const struct device *dev, k_timeout_t timeout)
 {
 	const struct mspi_dw_config *dev_config = dev->config;
 	struct mspi_dw_data *dev_data = dev->data;
+	struct mspi_xfer xfer = dev_data->xfer;
 	const struct mspi_xfer_packet *packet =
 		&dev_data->xfer.packets[dev_data->packets_done];
 	bool xip_enabled = COND_CODE_1(CONFIG_MSPI_XIP,
@@ -780,6 +783,8 @@ static int start_next_packet(const struct device *dev, k_timeout_t timeout)
 	uint32_t packet_frames;
 	uint32_t imr;
 	int rc = 0;
+
+	uint32_t in_fifo = FIELD_GET(RXFLR_RXTFL_MASK, read_rxflr(dev));
 
 	if (packet->num_bytes == 0 &&
 	    dev_data->xfer.cmd_length == 0 &&
@@ -986,16 +991,19 @@ static int start_next_packet(const struct device *dev, k_timeout_t timeout)
 		}
 	}
 
-	/* Enable interrupts now and wait until the packet is done. */
+	/* Enable interrupts now and wait until the packet is done unless async. */
 	write_imr(dev, imr);
 
-	rc = k_sem_take(&dev_data->finished, timeout);
-	if (read_risr(dev) & RISR_RXOIR_BIT) {
-		LOG_ERR("RX FIFO overflow occurred");
-		rc = -EIO;
-	} else if (rc < 0) {
-		LOG_ERR("Transfer timed out");
-		rc = -ETIMEDOUT;
+	if(!xfer.async) {
+		rc = k_sem_take(&dev_data->finished, timeout);
+		/* TODO: detect overflow in async mode*/
+		if (read_risr(dev) & RISR_RXOIR_BIT) {
+			LOG_ERR("RX FIFO overflow occurred");
+			rc = -EIO;
+		} else if (rc < 0) {
+			LOG_ERR("Transfer timed out");
+			rc = -ETIMEDOUT;
+		}
 	}
 
 	/* Disable the controller. This will immediately halt the transfer
@@ -1015,7 +1023,9 @@ static int start_next_packet(const struct device *dev, k_timeout_t timeout)
 			irq_unlock(key);
 		}
 	} else {
-		write_ssienr(dev, 0);
+		if(!xfer.async) {
+			write_ssienr(dev, 0);
+		}
 	}
 
 	if (dev_data->dev_id->ce.port) {
@@ -1072,6 +1082,8 @@ static int _api_transceive(const struct device *dev,
 			return rc;
 		}
 	}
+	/* Reset packets_done for async use-case*/
+	dev_data->packets_done = 0;
 
 	return 0;
 }
@@ -1083,15 +1095,18 @@ static int api_transceive(const struct device *dev,
 	struct mspi_dw_data *dev_data = dev->data;
 	int rc, rc2;
 
+	mspi_callback_handler_t cb = NULL;
+	struct mspi_callback_context *cb_ctx = NULL;
+	// struct mspi_event_data * evt_data = NULL;
+
 	if (dev_id != dev_data->dev_id) {
 		LOG_ERR("Controller is not configured for this device");
 		return -EINVAL;
 	}
 
-	/* TODO: add support for asynchronous transfers */
 	if (req->async) {
-		LOG_ERR("Asynchronous transfers are not supported");
-		return -ENOTSUP;
+		cb = dev_data->cbs[MSPI_BUS_XFER_COMPLETE];
+		cb_ctx = dev_data->cb_ctxs[MSPI_BUS_XFER_COMPLETE];
 	}
 
 	rc = pm_device_runtime_get(dev);
@@ -1117,6 +1132,34 @@ static int api_transceive(const struct device *dev,
 	}
 
 	return rc;
+}
+
+static int api_register_callback(const struct device *dev,
+					const struct mspi_dev_id *dev_id,
+					const enum mspi_bus_event evt_type,
+					mspi_callback_handler_t cb,
+					struct mspi_callback_context *ctx)
+{
+	// const struct mspi_dw_config *cfg = dev->config;
+	struct mspi_dw_data *dev_data = dev->data;
+
+	/* Check if device is in use */
+	// if (mspi_is_inp(controller)) {
+	// 	return -EBUSY;
+	// }
+	if (dev_id != dev_data->dev_id) {
+		LOG_ERR("Controller is not configured for this device");
+		return -EINVAL;
+	}
+
+	if (evt_type != MSPI_BUS_XFER_COMPLETE) {
+		LOG_ERR("Callback type not supported");
+		return -ENOTSUP;
+	}
+
+	dev_data->cbs[evt_type] = cb;
+	dev_data->cb_ctxs[evt_type] = ctx;
+	return 0;
 }
 
 #if defined(CONFIG_MSPI_XIP)
@@ -1279,7 +1322,7 @@ static int dev_pm_action_cb(const struct device *dev,
 			return rc;
 		}
 #endif
-		vendor_specific_resume(dev);
+		vendor_specific_resume(dev, dev->config);
 
 		dev_data->suspended = false;
 
@@ -1310,7 +1353,7 @@ static int dev_pm_action_cb(const struct device *dev,
 
 		dev_data->suspended = true;
 
-		vendor_specific_suspend(dev);
+		vendor_specific_suspend(dev, dev->config);
 
 		k_sem_give(&dev_data->ctx_lock);
 
@@ -1329,7 +1372,7 @@ static int dev_init(const struct device *dev)
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 
-	vendor_specific_init(dev);
+	vendor_specific_init(dev, dev->config);
 
 	dev_data->ctrlr0 |= FIELD_PREP(CTRLR0_SSISMST_BIT, !(dev_config->op_mode));
 
@@ -1372,6 +1415,7 @@ static DEVICE_API(mspi, drv_api) = {
 	.dev_config         = api_dev_config,
 	.get_channel_status = api_get_channel_status,
 	.transceive         = api_transceive,
+	.register_callback  = api_register_callback
 #if defined(CONFIG_MSPI_XIP)
 	.xip_config         = api_xip_config,
 #endif
@@ -1428,6 +1472,7 @@ static DEVICE_API(mspi, drv_api) = {
 	static struct mspi_dw_data dev##inst##_data;			\
 	static const struct mspi_dw_config dev##inst##_config = {	\
 		MSPI_DW_MMIO_ROM_INIT(DT_DRV_INST(inst)),		\
+                .wrapper_regs = (void*)DT_INST_REG_ADDR(inst),          \
 		.irq_config = irq_config##inst,				\
 		.clock_frequency = MSPI_DW_CLOCK_FREQUENCY(inst),	\
 	IF_ENABLED(CONFIG_PINCTRL,					\

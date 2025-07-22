@@ -236,3 +236,21 @@ static void reg_write(uint32_t data, const struct device *dev, uint32_t off)
 		dev_config->write(data, dev, off); \
 	}
 #endif
+
+struct mspi_dw_config {
+	DEVICE_MMIO_ROM;
+	void * wrapper_regs;
+	void (*irq_config)(void);
+	uint32_t clock_frequency;
+#if defined(CONFIG_PINCTRL)
+	const struct pinctrl_dev_config *pcfg;
+#endif
+	const struct gpio_dt_spec *ce_gpios;
+	uint8_t ce_gpios_len;
+	uint8_t tx_fifo_depth_minus_1;
+	uint8_t tx_fifo_threshold;
+	uint8_t rx_fifo_threshold;
+	DECLARE_REG_ACCESS();
+	bool sw_multi_periph;
+	enum mspi_op_mode op_mode;
+};
