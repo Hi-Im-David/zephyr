@@ -6,3 +6,13 @@ description: Nordic MSPI Interface using SSI IP
 compatible: "nordic,nrf-mspi"
 
 include: snps,designware-ssi.yaml
+
+properties:
+
+  bits-per-pixel:
+    type: int
+    default: 0
+    description: |
+      When using the MSPI to drive the display, the MSPI wrapper needs to know how many bits per
+      pixel (BPP) are being used. If 0, the reordering of the pixels based on the BPP is disabled.
+      Valid values are 0, 4, 8 and 16.

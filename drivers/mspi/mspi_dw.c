@@ -121,6 +121,7 @@ struct mspi_dw_config {
 	DECLARE_REG_ACCESS();
 	bool sw_multi_periph;
 	enum mspi_op_mode op_mode;
+	uint8_t bits_per_pixel;
 };
 
 /* Register access helpers. */
@@ -2060,6 +2061,8 @@ static DEVICE_API(mspi, drv_api) = {
 			DT_INST_PROP(inst, software_multiperipheral),	\
 		.op_mode = DT_STRING_TOKEN(DT_INST(inst,		\
 					   DT_DRV_COMPAT), op_mode),	\
+		.bits_per_pixel = 					\
+			DT_INST_PROP_OR(inst, bits_per_pixel, 0),	\
 	};								\
 	DEVICE_DT_INST_DEFINE(inst,					\
 		dev_init, PM_DEVICE_DT_INST_GET(inst),			\

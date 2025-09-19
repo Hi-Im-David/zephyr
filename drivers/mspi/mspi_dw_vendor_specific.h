@@ -164,6 +164,8 @@ static inline void vendor_specific_irq_clear(const struct device *dev)
 #define EVDMA_ATTR_EVENTS_Pos (31UL)
 #define EVDMA_ATTR_EVENTS_Msk (0x1UL << EVDMA_ATTR_EVENTS_Pos)
 
+#define ROUNDUP32(x) (((x) + 31U) >> 5)
+
 typedef enum {
 	EVDMA_BYTE_SWAP = 0,
 	EVDMA_JOBLIST = 1,
@@ -246,6 +248,12 @@ static inline int vendor_specific_setup_dma_xfer(const struct device *dev,
 
 	if (packet->dir == MSPI_TX) {
 		preg->CONFIG.RXTRANSFERLENGTH = 0;
+		/* Display registers */
+		preg->FORMAT.BPP = config->bits_per_pixel;
+		/* Number of pixels following the command */
+		preg->FORMAT.PIXELS = packet->num_bytes >> dev_data->bytes_per_frame_exp;
+		/* Command and address length (in 32-bit words)*/
+		preg->FORMAT.CILEN = ROUNDUP32(xfer->cmd_length) + ROUNDUP32(xfer->cmd_length);
 
 		/* Setting up EVDMA joblist dependin on cmd, addr and data */
 
@@ -323,6 +331,17 @@ static inline bool vendor_specific_read_dma_irq(const struct device *dev)
 
 	return (bool) preg->EVENTS_DMA.DONE;
 }
+
+#define CHECK_MSPI_BPP(inst)						\
+BUILD_ASSERT(\
+        (DT_INST_PROP(inst, bits_per_pixel) == 0  || \
+         DT_INST_PROP(inst, bits_per_pixel) == 4  || \
+         DT_INST_PROP(inst, bits_per_pixel) == 8  || \
+         DT_INST_PROP(inst, bits_per_pixel) == 16), \
+        "Invalid bits_per_pixel value in DeviceTree for instance " #inst);\
+
+DT_INST_FOREACH_STATUS_OKAY(CHECK_MSPI_BPP)
+
 
 #else /* Supply empty vendor specific macros for generic case */
 static inline void vendor_specific_init(const struct device *dev)
