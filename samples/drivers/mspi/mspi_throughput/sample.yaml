@@ -1,0 +1,12 @@
+sample:
+  name: MSPI Throughput Sample
+tests:
+  sample.drivers.mspi.throughput:
+    tags:
+      - mspi
+    filter: dt_compat_enabled("nordic,nrf-qspi-v2")
+    harness: console
+    harness_config:
+      type: multi_line
+      ordered: true
+    depends_on: mspi

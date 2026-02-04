@@ -1,0 +1,26 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+mainmenu "MSPI Throughput Sample application"
+
+config MSPI_THROUGHPUT_TOTAL_TRANSFER_SIZE
+	int "Total transfer size in bytes"
+	default 32768
+	range 1024 1048576
+	help
+	  Total amount of data to transfer during each test case.
+	  This value determines how much data is transferred for each
+	  buffer size and packet count combination.
+	  Default is 32 KB.
+
+config MSPI_THROUGHPUT_CLOCK_FREQ
+	int "MSPI clock frequency in Hz"
+	default 32000000
+	help
+	  MSPI controller clock frequency in Hz.
+	  This value determines the ideal throughput calculation and
+	  sets the MSPI clock frequency.
+
+source "Kconfig.zephyr"
