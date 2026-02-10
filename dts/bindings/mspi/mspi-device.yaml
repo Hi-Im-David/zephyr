@@ -106,6 +106,16 @@ properties:
       the first mspi transaction reads the length and the second
       mspi transaction reads length bytes.
 
+  mspi-xfer-mode:
+    type: string
+    enum:
+      - "MSPI_PIO"
+      - "MSPI_DMA"
+    description: |
+      Transfer mode for MSPI transactions. MSPI_PIO uses programmed I/O
+      (CPU-driven); MSPI_DMA uses DMA for transfers, which can reduce CPU
+      load and improve throughput for large reads and writes.
+
   rx-dummy:
     type: int
     description: |
