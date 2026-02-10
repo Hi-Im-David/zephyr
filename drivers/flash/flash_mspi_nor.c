@@ -63,7 +63,7 @@ static void set_up_xfer(const struct device *dev, enum mspi_xfer_direction dir)
 	memset(&dev_data->xfer, 0, sizeof(dev_data->xfer));
 	memset(&dev_data->packet, 0, sizeof(dev_data->packet));
 
-	dev_data->xfer.xfer_mode  = MSPI_PIO;
+	dev_data->xfer.xfer_mode  = dev_config->xfer_mode;
 	dev_data->xfer.packets    = &dev_data->packet;
 	dev_data->xfer.num_packet = 1;
 	dev_data->xfer.timeout    = dev_config->transfer_timeout;
@@ -1349,6 +1349,18 @@ BUILD_ASSERT((FLASH_SIZE(inst) % CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE) == 0, \
 #define PACKET_DATA_LIMIT(inst) \
 	DT_PROP_OR(DT_INST_BUS(inst), packet_data_limit, 0)
 
+#if defined(CONFIG_MSPI_DMA)
+#define FLASH_MSPI_DMA_AVAILABLE 1
+#else
+#define FLASH_MSPI_DMA_AVAILABLE 0
+#endif
+
+#define FLASH_MSPI_NOR_XFER_MODE_CHECK(inst) \
+	BUILD_ASSERT(								     \
+		(DT_INST_ENUM_IDX_OR(inst, mspi_xfer_mode, MSPI_PIO) != MSPI_DMA) || \
+		FLASH_MSPI_DMA_AVAILABLE,					     \
+		"xfer-mode is MSPI_DMA but CONFIG_MSPI_DMA is not enabled");
+
 #define FLASH_MSPI_NOR_INST(inst)						\
 	BUILD_ASSERT(!PACKET_DATA_LIMIT(inst) ||				\
 		     FLASH_PAGE_SIZE(inst) <= PACKET_DATA_LIMIT(inst),		\
@@ -1398,7 +1410,10 @@ BUILD_ASSERT((FLASH_SIZE(inst) % CONFIG_FLASH_MSPI_NOR_LAYOUT_PAGE_SIZE) == 0, \
 					       software_multiperipheral),	\
 		IO_MODE_FLAGS(DT_INST_ENUM_IDX(inst, mspi_io_mode)),		\
 		.initial_soft_reset = DT_INST_PROP(inst, initial_soft_reset),	\
+		.xfer_mode = DT_INST_ENUM_IDX_OR(inst, mspi_xfer_mode,		\
+						 MSPI_PIO),			\
 	};									\
+	FLASH_MSPI_NOR_XFER_MODE_CHECK(inst)					\
 	FLASH_PAGE_LAYOUT_CHECK(inst)						\
 	DEVICE_DT_INST_DEFINE(inst,						\
 		drv_init, PM_DEVICE_DT_INST_GET(inst),				\
