@@ -20,6 +20,20 @@ nvic: &cpuapp_nvic {};
 		zephyr,entropy = &rng;
 	};
 
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		aperture_cached: memory@2000000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "zephyr,memory-region", "mmio-sram";
+			reg = <0x02000000 0x0e000000>;
+			zephyr,memory-region = "APERTURE_CACHED";
+		};
+	};
+
 	soc {
 		compatible = "simple-bus";
 		interrupt-parent = <&cpuapp_nvic>;
