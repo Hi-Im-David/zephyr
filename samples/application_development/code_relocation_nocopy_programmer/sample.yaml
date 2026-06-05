@@ -1,0 +1,21 @@
+sample:
+  name: Code Relocation NoCopy External Flash Programmer
+  description: >-
+    One-shot programmer that writes an embedded binary blob to the MSPI NOR
+    flash referenced by DT alias "flash0". Intended as the companion tool for
+    the code_relocation_nocopy sample on boards where the host programmer
+    cannot write the XIP aperture directly.
+tests:
+  sample.application_development.code_relocation_nocopy_programmer:
+    tags:
+      - mspi
+      - flash
+    platform_allow:
+      - nrf7120dk/nrf7120/cpuapp
+    harness: console
+    harness_config:
+      type: multi_line
+      ordered: true
+      regex:
+        - "programmer: starting"
+        - "programmer: OK"
