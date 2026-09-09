@@ -4,9 +4,6 @@
 
 '''Runner for flashing nRF7120 (Wezen) devices that are in the Empty LCS.'''
 
-import json
-import subprocess
-import sys
 from pathlib import Path
 
 from runners.nrfutil import NrfUtilBinaryRunner
@@ -18,13 +15,6 @@ from runners.nrfutil import NrfUtilBinaryRunner
 # the device back into the state the soft resets are meant to leave. This is
 # fixed in Wezen 1.1.
 SOFT_RESETS_AFTER_ERASE = 2
-
-# A Wezen device in the Empty LCS reads back a part number of 0x00000000, so
-# automatic detection fails and the real part number has to be forced. nrfutil
-# only honours --x-partno on direct operations: it is not recorded in a batch
-# file, and 'batch-execute' ignores the option. Every operation is therefore run
-# directly instead of being collected into a batch.
-X_PARTNO = '0x2c'
 
 
 class NrfUtilWezenBinaryRunner(NrfUtilBinaryRunner):
@@ -46,80 +36,6 @@ class NrfUtilWezenBinaryRunner(NrfUtilBinaryRunner):
                                         force=args.force, recover=args.recover,
                                         ext_mem_config_file=args.ext_mem_config_file,
                                         dry_run=args.dry_run)
-
-    def _exec(self, args, force=False):
-        # 'list' is the only operation issued by this runner that rejects
-        # --x-partno, since it enumerates probes rather than targeting a device.
-        if args and args[0] != 'list':
-            args = args + ['--x-partno', X_PARTNO]
-
-        cmd = ['nrfutil', '--json', 'device'] + args
-        self._log_cmd(cmd)
-
-        if self.dry_run and not force:
-            return {}
-
-        jout_all = []
-        err_code = None
-
-        with subprocess.Popen(cmd, stdout=subprocess.PIPE) as p:
-            for line in iter(p.stdout.readline, b''):
-                # https://github.com/ndjson/ndjson-spec
-                jout = json.loads(line.decode(sys.getdefaultencoding()))
-                jout_all.append(jout)
-
-                if jout['type'] == 'task_progress':
-                    progress = jout['data']['progress']
-                    if progress['progressPercentage'] == 0:
-                        self.logger.info(progress['description'])
-                elif jout['type'] == 'task_end' and jout['data']['error']:
-                    err_code = jout['data']['error']['code']
-
-        if p.returncode != 0:
-            # nrfutil exits with 1 regardless of the failure, so report the
-            # error code from the task instead. The base class inspects it to
-            # detect e.g. a protected device or a failed verification.
-            raise subprocess.CalledProcessError(err_code or p.returncode, cmd)
-
-        return jout_all
-
-    def _direct_cmd(self, op):
-        _op = op['operation']
-        op_type = _op['type']
-
-        cmd = [op_type]
-
-        if op_type == 'program':
-            cmd += ['--firmware', _op['firmware']['file']]
-            opts = _op['options']
-            cli_opts = f"chip_erase_mode={opts['chip_erase_mode']}"
-            if opts.get('ext_mem_erase_mode'):
-                cli_opts += f",ext_mem_erase_mode={opts['ext_mem_erase_mode']}"
-            if opts.get('verify'):
-                cli_opts += f",verify={opts['verify']}"
-            cmd += ['--options', cli_opts]
-        elif op_type == 'reset':
-            cmd += ['--reset-kind', _op['kind']]
-        elif op_type == 'erase':
-            cmd.append(f'--{_op["kind"]}')
-        elif op_type == 'x-provision-keys':
-            cmd += ['--key-file', _op['keyfile']]
-
-        cmd += ['--core', op['core']] if op.get('core') else []
-        cmd += ['--x-family', f'{self.family}']
-        cmd += ['--serial-number', self._format_dev_ids()]
-        return cmd
-
-    def _exec_batch(self):
-        ops, self._ops = self._ops, []
-        self._op_id = 1
-
-        precmd = []
-        if self.ext_mem_config_file:
-            precmd = ['--x-ext-mem-config-file', self.ext_mem_config_file]
-
-        for op in ops:
-            self._exec(precmd + self._direct_cmd(op))
 
     def _erase_and_soft_reset(self):
         # Each step is flushed separately so that it runs as its own nrfutil
