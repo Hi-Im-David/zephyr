@@ -52,6 +52,7 @@ _names = [
     'native',
     'nrfjprog',
     'nrfutil',
+    'wezen_empty_lcs',
     'nsim',
     'nxp_s32dbg',
     'openocd',
